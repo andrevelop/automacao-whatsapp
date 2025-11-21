@@ -1,0 +1,11 @@
+# Libs
+# Instalar no venv com: pip install -r requirements.txt
+fastapi
+uvicorn[Standard]
+requests
+python-dotenv
+google-api-python-client
+google-auth-httplib2
+google-auth
+pydantic
+flask
