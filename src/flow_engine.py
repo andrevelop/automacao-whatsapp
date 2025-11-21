@@ -33,9 +33,7 @@ def process_message(phone, text):
 
     stage = user_sessions[phone]["stage"]
 
-    # --------------------
     # FLUXO PRINCIPAL
-    # --------------------
 
     # 1) Fluxo simples para "oi", "olá"
     if stage == "inicio":
