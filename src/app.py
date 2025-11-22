@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify
 from config import settings
 from whatsapp_api import send_text_message
 from flow_engine import process_message
+from logs.log import log_event, log_error
 
 app = Flask(__name__)
 
@@ -23,7 +24,7 @@ def verify_token():
     
     return "Erro: token inválido", 403
 
-#2- RECEBIMENTO DE MENSAGENS
+#2- RECEBIMENTO DE MENSAGENS (POST)
 
 @app.route("/webhook", methods=["POST"])
 def incoming_message():
@@ -34,16 +35,36 @@ def incoming_message():
         phone = message["from"]
         text = message["text"]["body"]
 
+        # LOG 1 - Registrar chegada da menwsagem do webhook
+        log_event(
+            phone=phone,
+            message_in=text,
+            action="mensagem_recebida_no_webhook"
+        )
+        #Processar a mensagem no flow_engine:
+
         resposta = process_message(phone, text)
     
-    #Debug:
-        print("Mensagem recebida de:", phone)
-        print("Conteúdo recebido:", text)
-        print("Resposta gerada pelo flow:", resposta)
-    #Debug.fim.
         send_text_message(phone, resposta)
+
+        #LOG 2 - Registrar resposta enviada ao usuário.
+
+        log_event(
+            phone=phone,
+            message_in=text,
+            action="resposta_enviada",
+            extra={"resposta": resposta}
+        )
     except Exception as e:
+        import traceback
         print("Erro ao processar mensagem:", e)
+
+        # LOG 3 - Registrar erros (log separado)
+        log_error(
+            phone=phone if "phone" in locals() else "DESCONHECIDO",
+            error_message=str(e),
+            traceback_str=traceback.format_exc()
+        )
 
     return jsonify({"status": "ok"}), 200
 
