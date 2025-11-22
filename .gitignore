@@ -1,0 +1,17 @@
+# Ambiente virtual
+venv/
+
+# Arquivos Python compilados
+__pycache__/
+*.pyc
+
+# Variáveis de ambiente
+.env
+
+# Arquivos de log gerados em runtime
+src/logs_data/*
+!src/logs_data/.gitkeep
+
+# Arquivos temporários
+*.log
+*.tmp
