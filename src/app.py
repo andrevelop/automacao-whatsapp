@@ -3,7 +3,13 @@ from flask import Flask, request, jsonify
 from config import settings
 from whatsapp_api import send_text_message
 from flow_engine import process_message
-from logs.log import log_event, log_error, log_infra, log_raw, log_system_error
+from logs.log import (
+    log_event,
+    log_error,
+    log_infra,
+    log_raw,
+    log_system_error
+)
 
 app = Flask(__name__)
 
@@ -83,8 +89,6 @@ def incoming_message():
         return jsonify({"status": "erro_interno"}), 500
 
     return jsonify({"status": "ok"}), 200
-
-
 
 if __name__ == "__main__":
     log_infra("servidor_iniciado", {"porta": 5000})
