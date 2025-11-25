@@ -11,7 +11,10 @@ __pycache__/
 # Arquivos de log gerados em runtime
 src/logs_data/*
 !src/logs_data/.gitkeep
+logs_infra
+logs_raw
 
 # Arquivos temporários
 *.log
 *.tmp
+*.json
