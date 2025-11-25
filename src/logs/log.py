@@ -10,13 +10,17 @@ Atualmente esse sistema de logs está gravando:
 - Logs RAW (payload bruto recebido no webhook)
 """
 
+# Diretório BASE do módulo de logs (sempre relativo ao arquivo atual)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 #Pasta onde os logs serão salvos:
-LOG_DIR_USERS = "logs_data"
-LOG_DIR_INFRA = "logs_infra"
-LOG_DIR_RAW = "logs_raw"
+LOG_DIR_USERS = os.path.join(BASE_DIR, "logs_data")
+LOG_DIR_ERRORS = os.path.join(BASE_DIR, "logs_errors")
+LOG_DIR_INFRA = os.path.join(BASE_DIR, "logs_infra")
+LOG_DIR_RAW = os.path.join(BASE_DIR, "logs_raw")
 
 #Garante que a pasta exista, criando automaticamente: 
-for folder in [LOG_DIR_USERS, LOG_DIR_INFRA, LOG_DIR_RAW]:
+for folder in [LOG_DIR_USERS, LOG_DIR_ERRORS, LOG_DIR_INFRA, LOG_DIR_RAW]:
     os.makedirs(folder, exist_ok=True)
 
 def _write_log(directory, filename, log_entry):

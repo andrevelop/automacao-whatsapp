@@ -1,7 +1,7 @@
 #Aqui é o Servidor, onde roda a FastAPI, recebe webhooks do whatsapp e inicia rotas.
 from flask import Flask, request, jsonify
 from config import settings
-from whatsapp_api import send_text_message
+from services.meta_client import send_text
 from flow_engine import process_message
 from logs.log import (
     log_event,
@@ -41,19 +41,27 @@ def incoming_message():
     log_infra("webhook_post_recebido")
 
     try:
-        # Tentativa de extrair dados do payload da Meta
-        try:
-            message = data["entry"][0]["changes"][0]["value"]["messages"][0]
+        value = data["entry"][0]["changes"][0]["value"]
+
+        #Em caso de mensagem normal:
+        if "messages" in value:
+            message = value["messages"][0]
             phone = message["from"]
             text = message["text"]["body"]
-        except Exception as e:
-            # Caso o payload venha inválido
-            import traceback
-            tb = traceback.format_exc()
-
-            log_system_error(f"Payload inválido recebido: {str(e)}", tb)
-            return jsonify({"status": "erro_payload"}), 400
-
+        # Caso seja STATUS (entregue, lido, enviado) -> IGNORAR
+        elif "statuses" in value:
+            log_infra("webhook_status_ignorado", value["statuses"])
+            return jsonify({"status": "status_ignorado"}), 200
+        
+        # Caso não tenha messages nem statuses -> payload estranho
+        else:
+            raise KeyError("Payload sem 'messages' ou 'statuses'")
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        log_system_error(f"Payload inválido recebido: {str(e)}", tb)
+        return jsonify({"status": "erro_payload"}), 400
+    
         # LOG 1 – Chegada da mensagem no webhook
         log_event(
             phone=phone,
@@ -65,7 +73,7 @@ def incoming_message():
         resposta = process_message(phone, text)
 
         # Enviar resposta ao WhatsApp
-        send_text_message(phone, resposta)
+        send_text(phone, resposta)
 
         # LOG 2 – Resposta enviada
         log_event(
