@@ -3,12 +3,33 @@ from flask import Flask
 from logs.log import log_infra, log_system_error
 from services.scheduler import run_schedule
 import threading
+from services.google_client import get_unnotified_rows
+from datetime import datetime
 
 app = Flask(__name__)
 
 @app.route("/")
 def home():
     return "<h3>Servidor da automação está rodando ✓</h3>"
+
+@app.route("/health")
+def health_check():
+    try:
+        # tenta pegar quantas linhas não enviadas existem
+        rows = get_unnotified_rows()
+        pending = len(rows)
+        status = "ok"
+    except Exception as e:
+        # se falhar, sinalizamos no health check
+        pending = None
+        status = "error"
+
+    return {
+        "status": status,
+        "pending_rows": pending,
+        "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "test_mode": settings.TEST_MODE,
+    }
 
 def start_scheduler():
     """
