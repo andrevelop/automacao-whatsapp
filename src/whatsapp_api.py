@@ -10,7 +10,7 @@ def send_text_message(to_number: str, text: str):
 
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {settings.WHATSAPP_TOKEN}"
+        "Authorization": f"Bearer {settings.META_TOKEN}"
     }
 
     payload = {

@@ -7,7 +7,7 @@ __pycache__/
 
 # Variáveis de ambiente
 .env
-
+LEMBRETES.txt
 # Arquivos de log gerados em runtime
 src/logs_data/*
 !src/logs_data/.gitkeep
@@ -18,3 +18,36 @@ logs_raw
 *.log
 *.tmp
 *.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+
+# Virtual env
+venv/
+env/
+.venv/
+.ENV/
+
+# IDE/editor
+.vscode/
+.idea/
+
+# Environment variables and secrets
+*.env
+src/services/keys/
+src/services/keys/*
+.DS_Store
+
+# Logs and runtime
+src/logs/
+src/logs_data/
+*.log
+
+# Build
+dist/
+build/
+*.egg
