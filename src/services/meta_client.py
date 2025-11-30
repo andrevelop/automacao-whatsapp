@@ -3,7 +3,7 @@ from config import settings
 from logs.log import log_infra, log_system_error
 
 def _post_meta(payload):
-    """Funçãpo interna para enviar requisição POST para a API da Meta.
+    """Função interna para enviar requisição POST para a API da Meta.
     Faz logs automáticos de sucesso e erro.
     """
     url = settings.META_API_URL

@@ -14,13 +14,11 @@ Atualmente esse sistema de logs está gravando:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 #Pasta onde os logs serão salvos:
-LOG_DIR_USERS = os.path.join(BASE_DIR, "logs_data")
-LOG_DIR_ERRORS = os.path.join(BASE_DIR, "logs_errors")
 LOG_DIR_INFRA = os.path.join(BASE_DIR, "logs_infra")
 LOG_DIR_RAW = os.path.join(BASE_DIR, "logs_raw")
 
 #Garante que a pasta exista, criando automaticamente: 
-for folder in [LOG_DIR_USERS, LOG_DIR_ERRORS, LOG_DIR_INFRA, LOG_DIR_RAW]:
+for folder in [LOG_DIR_INFRA, LOG_DIR_RAW]:
     os.makedirs(folder, exist_ok=True)
 
 def _write_log(directory, filename, log_entry):
@@ -68,56 +66,6 @@ def log_raw(raw_payload, level="DEBUG"):
     filename = f"{timestamp}.json"
     _write_log(LOG_DIR_RAW, filename, log_entry)
 
-#Log por USUÁRIO (mensagens, decisões, avanços de etapa):
-def log_event(phone, message_in, action, state_before=None, state_after=None, extra=None, level="INFO"):
-    """
-    Registra eventos importantes do bot para auditoria e debug.
-    
-    phone > Número do usuário
-    message_in > Mensagem recebida
-    action > O que o bot decidiu fazer
-    state_before > Estado do usuário antes do processamento
-    state_after > Estado do usuário depois do processamento
-    extra > Dados extras (opcional)
-    """
-
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-
-    log_entry = {
-        "timestamp": timestamp,
-        "level": level,
-        "phone": phone,
-        "message_in": message_in,
-        "action": action,
-        "state_before": state_before,
-        "state_after": state_after,
-        "extra": extra,
-    }
-
-    filename = f"{phone}_{date_str}.log"
-    _write_log(LOG_DIR_USERS, filename, log_entry)
-
-#Log de ERRO POR USUÁRIO:
-def log_error(phone, error_message, traceback_str=None):
-    """
-    Registra erros de execução que ocorrerem 
-    no fluxo relacionados ao usuário.
-    """
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-        
-    log_entry = {
-        "timestamp": timestamp,
-        "level": "ERROR",
-        "phone": phone,
-        "error": error_message,
-        "traceback": traceback_str,
-    }
-
-    filename = f"{phone}_{date_str}_ERROR.log"
-    _write_log(LOG_DIR_USERS, filename, log_entry)
-
 #Log de ERROS NA INFRAESTRUTURA DO SERVIDOR (erros que acontece fora do fluxo do user, relacionado ao sistema):
 def log_system_error(error_message, traceback_str=None, level="CRITICAL"):
     """
@@ -126,9 +74,6 @@ def log_system_error(error_message, traceback_str=None, level="CRITICAL"):
     - Exceções que não envolvem fluxo do usuário
     - Problemas ao receber payloads do webhook
     - Falhas de comunicação geral
-
-    Diferente do log_error(), este NÃO é por usuário,
-    e fica armazenado em logs_infra/.
     """
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
