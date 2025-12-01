@@ -1,26 +1,30 @@
-#Aqui é o Servidor, onde roda a FastAPI, recebe webhooks do whatsapp e inicia rotas.
 from flask import Flask
-from logs.log import log_infra, log_system_error
+from logs.log import log
 from services.scheduler import run_schedule
 import threading
 from services.google_client import get_unnotified_rows
 from datetime import datetime
+from config import settings
 
 app = Flask(__name__)
+
 
 @app.route("/")
 def home():
     return "<h3>Servidor da automação está rodando ✓</h3>"
 
+
 @app.route("/health")
 def health_check():
     try:
-        # tenta pegar quantas linhas não enviadas existem
         rows = get_unnotified_rows()
         pending = len(rows)
+
+        log("infra", "INFO", "health_check_ok", {"pending": pending})
+
         status = "ok"
     except Exception as e:
-        # se falhar, sinalizamos no health check
+        log("infra", "ERROR", "health_check_error", {"erro": str(e)})
         pending = None
         status = "error"
 
@@ -31,27 +35,34 @@ def health_check():
         "test_mode": settings.TEST_MODE,
     }
 
+
 def start_scheduler():
     """
     Roda o monitoramento da planilha em uma thread separada.
-    Isso permite que o Flask rode normalmente.
     """
     try:
-        log_infra("scheduler_iniciado")
+        log("infra", "INFO", "scheduler_iniciado")
         run_schedule()
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        log_system_error(str(e), tb)
+
+        log("infra", "CRITICAL", "scheduler_erro", {
+            "erro": str(e),
+            "traceback": tb
+        })
+
 
 if __name__ == "__main__":
-    from config import settings  # import local para controlar debug via .env
-
-    log_infra("servidor_iniciado", {"porta": 5000})
+    log("infra", "INFO", "servidor_iniciado", {"porta": 5000})
 
     # Inicia o scheduler em paralelo
     scheduler_thread = threading.Thread(target=start_scheduler, daemon=True)
     scheduler_thread.start()
 
-    # Iniciar o servidor Flask apenas uma vez, com debug controlado pelo .env
-    app.run(host="0.0.0.0", port=5000, debug=getattr(settings, "DEBUG_MODE", False), use_reloader=False)
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=getattr(settings, "DEBUG_MODE", False),
+        use_reloader=False
+    )
