@@ -2,10 +2,11 @@ from flask import Flask, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from logs.log import log
-from services.scheduler import run_scheduler
+from services.scheduler import run_scheduler, PENDING
 from services.google_client import get_unnotified_rows
 from config import settings
 from datetime import datetime
+from services.google_client import mark_row_notified
 
 app = Flask(__name__)
 
@@ -35,30 +36,31 @@ def health_check():
         return {"status": "error"}
 
 # WEBHOOK — OBRIGATÓRIO PARA META
-@app.route("/webhook", methods=["GET", "POST"])
+@app.route("/webhook", methods=["POST"])
 def webhook():
-    # 1) VERIFICAÇÃO DO FACEBOOK (GET)
-    if request.method == "GET":
-        mode = request.args.get("hub.mode")
-        token = request.args.get("hub.verify_token")
-        challenge = request.args.get("hub.challenge")
+    data = request.json
+    log("raw", "webhook_evento_recebido", data)
 
-        # Logs úteis para debug
-        log("infra", "webhook_verificacao", {
-            "mode": mode, 
-            "token": token
-        })
+    try:
+        entry = data["entry"][0]
+        changes = entry["changes"][0]
+        value = changes["value"]
 
-        if mode == "subscribe" and token == settings.VERIFY_TOKEN:
-            return challenge, 200
-        else:
-            return "Erro: token inválido", 403
+        if "statuses" in value:
+            status_obj = value["statuses"][0]
+            wamid = status_obj.get("id")
+            status = status_obj.get("status")
 
-    # 2) RECEBENDO EVENTOS (POST)
-    if request.method == "POST":
-        data = request.json
-        log("raw", "webhook_evento_recebido", data)
-        return "EVENT_RECEIVED", 200
+            if status == "sent" and wamid in PENDING:
+                row_index = PENDING.pop(wamid)
+                mark_row_notified(row_index, "ENVIADO")
+                log("audit", "webhook_mensagem_enviada", {"wamid": wamid, "linha": row_index})
+
+    except Exception as e:
+        log("system_errors", "webhook_process_error", {"erro": str(e)})
+
+    return "EVENT_RECEIVED", 200
+
 
 # START SERVER
 if __name__ == "__main__":

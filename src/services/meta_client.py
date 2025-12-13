@@ -40,18 +40,38 @@ def _post_to_meta(payload: dict):
         return None
 
 
-def send_message(to: str, message: str):
-    """
-    API pública: envia texto via Meta (WhatsApp). Retorna True em sucesso, False em falha.
-    """
+def send_template(to: str, template_name: str, variables: list):
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
-        "type": "text",
-        "text": {"body": message}
+        "type": "template",
+        "template": {
+            "name": template_name,
+            "language": {"code": "pt_BR"},
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": str(v)} for v in variables
+                    ]
+                }
+            ]
+        }
     }
 
+    log("raw", "meta_payload_enviado", payload)
+
     resp = _post_to_meta(payload)
+
     if resp is None:
         return False
-    return resp.status_code == 200
+
+    try:
+        body = resp.json()
+    except:
+        return False
+
+    if "messages" in body:
+        return body["messages"][0].get("id")  # retorna o wamid
+    else:
+        return False

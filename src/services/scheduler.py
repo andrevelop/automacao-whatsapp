@@ -9,7 +9,8 @@ from services.notifier import notify_number
 # Intervalo entre checagens (segundos).
 # Se você quiser alterar sem tocar no código, defina CHECK_INTERVAL no settings/.env.
 CHECK_INTERVAL = getattr(settings, "CHECK_INTERVAL", 10)
-
+# Mapeamento temporário: wamid -> row_index (pendente até webhook confirmar)
+PENDING = {}
 
 def _is_send_success(result):
     """
@@ -32,40 +33,27 @@ def _is_send_success(result):
         pass
     return False
 
-
 def _process_one(row_index: int, row):
-    """
-    Processa uma única linha: chama notifier e atualiza a planilha com ENVIADO ou FALHOU <ts>.
-    """
     log("infra", "scheduler_envio_iniciado", {"linha": row_index})
 
     try:
-        # chama o notifier (notify_number espera number_id, row)
-        result = notify_number(settings.WHATSAPP_NUMBER, row)
+        wamid = notify_number(settings.WHATSAPP_NUMBER, row)
 
-        success = _is_send_success(result)
-
-        if success:
-            # marca ENVIADO
-            ok = mark_row_notified(row_index, "ENVIADO")
-            log("audit", "scheduler_envio_ok", {"linha": row_index, "mark_ok": ok})
-        else:
-            # marca FALHOU com timestamp
+        if not wamid:
             ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-            ok = mark_row_notified(row_index, f"FALHOU {ts}")
-            log("failed_delivery", "scheduler_envio_falhou", {
-                "linha": row_index,
-                "mark_ok": ok,
-                "notifier_result": str(result)
-            })
+            mark_row_notified(row_index, f"FALHOU {ts}")
+            log("failed_delivery", "scheduler_envio_falhou", {"linha": row_index})
+            return
+
+        # armazena para confirmação via webhook
+        PENDING[wamid] = row_index
+        log("audit", "scheduler_wamid_registrado", {"wamid": wamid, "linha": row_index})
+
     except Exception as e:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-        try:
-            mark_row_notified(row_index, f"FALHOU {ts}")
-        except Exception:
-            # se não conseguir escrever, ao menos loga o erro
-            log("system_errors", "scheduler_mark_failed_exception", {"linha": row_index, "erro": str(e)})
-        log("system_errors", "scheduler_exception_process_one", {"linha": row_index, "erro": str(e)})
+        mark_row_notified(row_index, f"FALHOU {ts}")
+        log("system_errors", "scheduler_exception_process_one", {"erro": str(e)})
+
 
 
 def _loop():

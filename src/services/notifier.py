@@ -1,5 +1,5 @@
 from config import settings
-from services.meta_client import send_message
+from services.meta_client import send_template
 from logs.log import log
 
 
@@ -8,44 +8,56 @@ def _get_field(row, idx):
 
 
 def format_notification(row):
-    obra = _get_field(row, 0)
-    etapa = _get_field(row, 1)
-    material = _get_field(row, 2)
-    quantidade = _get_field(row, 3)
-    data_entrega = _get_field(row, 4)
-    solicitante = _get_field(row, 5)
-    observacoes = _get_field(row, 6)
+    """
+    Converte a linha da planilha para o dicionário de variáveis
+    exigido pelo template pedido_forms.
+    """
 
-    message = (
-        "*NOVO PEDIDO SOLICITADO*\n\n"
-        f"*Obra:* {obra}\n"
-        f"*Etapa:* {etapa}\n"
-        f"*Material:* {material}\n"
-        f"*Quantidade:* {quantidade}\n"
-        f"*Data Entrega:* {data_entrega}\n"
-        f"*Solicitante:* {solicitante}\n"
-        f"*Observações:* {observacoes}\n"
-    )
-    return message
-
+    return {
+        "obra": _get_field(row, 1),
+        "etapa": _get_field(row, 2),
+        "material": _get_field(row, 3),
+        "quantidade": _get_field(row, 4),
+        "data_entrega": _get_field(row, 5),
+        "solicitante": _get_field(row, 6),
+        "observacoes": _get_field(row, 7)
+    }
 
 def notify_number(number_id: str, row):
-    """
-    Envia a mensagem para number_id usando meta_client.send_message.
-    Retorna True se enviado, False se falhou.
-    """
-    message = format_notification(row)
-    log("raw", "notifier_message_formatada", {"number": number_id, "message": message})
+    obra = row[1]
+    etapa = row[2]
+    material = row[3]
+    quantidade = row[4]
+    data_entrega = row[5]
+    solicitante = row[6]
+    observacoes = row[7]
+
+    variables = [
+        obra,
+        etapa,
+        material,
+        quantidade,
+        data_entrega,
+        solicitante,
+        observacoes
+    ]
+
+    log("raw", "notifier_template_variaveis", {"vars": variables})
 
     if settings.TEST_MODE:
         log("infra", "notifier_test_mode", {"number": number_id})
-        return True
+        return "TESTE_WAMID"
 
-    success = send_message(number_id, message)
+    wamid = send_template(
+        number_id,
+        template_name="pedido_forms",  # nome do template novo
+        variables=variables
+    )
 
-    if success:
-        log("audit", "notifier_envio_sucesso", {"number": number_id})
-        return True
+    if wamid:
+        log("audit", "notifier_envio_sucesso", {"number": number_id, "wamid": wamid})
+        return wamid
 
     log("failed_delivery", "notifier_envio_erro", {"number": number_id})
     return False
+
