@@ -1,66 +1,77 @@
+import json
 import requests
 from config import settings
 from logs.log import log
 
 
-def _post_meta(payload):
-    """
-    Envia POST para a API da Meta.
-    Gera logs completos:
-      - infra: request e response
-      - raw: payload bruto enviado e recebido
-    """
-
+def _post_to_meta(payload: dict):
     url = settings.META_API_URL
     token = settings.META_TOKEN
-    
+
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
 
-    # Log infraestrutura: envio
-    log("infra", "INFO", "meta_request_enviada", {"payload": payload})
-
-    # Log RAW: o request bruto enviado
-    log("raw", "INFO", "meta_raw_request", payload)
+    log("raw", "meta_payload_enviado", payload)
 
     try:
-        response = requests.post(url, headers=headers, json=payload)
+        resp = requests.post(url, headers=headers, json=payload, timeout=15)
 
-        # Log do RAW da resposta
         try:
-            raw_response = response.json()
+            raw = resp.json()
         except Exception:
-            raw_response = response.text
-        
-        log("raw", "INFO", "meta_raw_response", raw_response)
+            raw = resp.text
 
-        # Log de infraestrutura
-        level = "INFO" if response.status_code == 200 else "ERROR"
+        log("raw", "meta_raw_response", {"status": resp.status_code, "body": raw})
 
-        log("infra", level, "meta_response_recebida", {
-            "status_code": response.status_code,
-            "response_text": response.text
-        })
+        if resp.status_code != 200:
+            log("failed_delivery", "meta_http_error", {"status": resp.status_code, "body": resp.text})
+        else:
+            log("infra", "meta_http_ok", {"status": resp.status_code})
 
-        return response
-    
+        return resp
+
+    except requests.RequestException as e:
+        log("failed_delivery", "meta_request_exception", {"erro": str(e)})
+        return None
     except Exception as e:
-        log("infra", "CRITICAL", "erro_meta_exception", {"erro": str(e)})
+        log("system_errors", "meta_exception", {"erro": str(e)})
         return None
 
 
-
-def send_text(to: str, message: str):
-    """
-    Envia uma mensagem simples de texto pelo WhatsApp Business API.
-    """
+def send_template(to: str, template_name: str, variables: list):
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
-        "type": "text",
-        "text": {"body": message}
+        "type": "template",
+        "template": {
+            "name": template_name,
+            "language": {"code": "pt_BR"},
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": str(v)} for v in variables
+                    ]
+                }
+            ]
+        }
     }
 
-    return _post_meta(payload)
+    log("raw", "meta_payload_enviado", payload)
+
+    resp = _post_to_meta(payload)
+
+    if resp is None:
+        return False
+
+    try:
+        body = resp.json()
+    except:
+        return False
+
+    if "messages" in body:
+        return body["messages"][0].get("id")  # retorna o wamid
+    else:
+        return False

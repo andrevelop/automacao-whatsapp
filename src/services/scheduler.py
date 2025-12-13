@@ -1,59 +1,110 @@
+import threading
 import time
+from datetime import datetime
+from logs.log import log
+from config import settings
 from services.google_client import get_unnotified_rows, mark_row_notified
-from services.notifier import notify_group
-from logs.log import log  # novo logger unificado
+from services.notifier import notify_number
 
-GROUP_ID = "COLOQUE_AQUI_O_GROUP_ID"   # substitua depois
+# Intervalo entre checagens (segundos).
+# Se você quiser alterar sem tocar no código, defina CHECK_INTERVAL no settings/.env.
+CHECK_INTERVAL = getattr(settings, "CHECK_INTERVAL", 10)
+# Mapeamento temporário: wamid -> row_index (pendente até webhook confirmar)
+PENDING = {}
 
-
-def run_schedule():
+def _is_send_success(result):
     """
-    Loop simples que verifica a planilha a cada X segundos.
+    Normaliza o resultado do notify_number para True/False.
+    Aceita:
+      - booleano True/False
+      - dict com chave "status" == "OK" (case-insensitive)
+      - objeto com atributo status_code (ex.: requests.Response)
     """
+    try:
+        if isinstance(result, bool):
+            return result
+        if isinstance(result, dict):
+            status = str(result.get("status", "")).strip().upper()
+            return status in ("OK", "SUCCESS", "200")
+        # duck-typing: requests.Response ou similar
+        if hasattr(result, "status_code"):
+            return getattr(result, "status_code") == 200
+    except Exception:
+        pass
+    return False
+
+def _process_one(row_index: int, row):
+    log("infra", "scheduler_envio_iniciado", {"linha": row_index})
+
+    try:
+        wamid = notify_number(settings.WHATSAPP_NUMBER, row)
+
+        if not wamid:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+            mark_row_notified(row_index, f"FALHOU {ts}")
+            log("failed_delivery", "scheduler_envio_falhou", {"linha": row_index})
+            return
+
+        # armazena para confirmação via webhook
+        PENDING[wamid] = row_index
+        log("audit", "scheduler_wamid_registrado", {"wamid": wamid, "linha": row_index})
+
+    except Exception as e:
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+        mark_row_notified(row_index, f"FALHOU {ts}")
+        log("system_errors", "scheduler_exception_process_one", {"erro": str(e)})
+
+
+
+def _loop():
+    """
+    Loop principal do scheduler.
+    - Não gera logs quando não há pendentes (evita spam).
+    - Quando há pendentes, gera logs relevantes.
+    """
+    log("infra", "scheduler_thread_iniciada", {})
 
     while True:
         try:
-            print("🔄 Verificando planilha...")
+            pendentes = get_unnotified_rows()  # deve retornar lista de tuples (index, row)
 
-            rows = get_unnotified_rows()
+            if not pendentes:
+                # sem pendentes: não gera logs e vai dormir
+                time.sleep(CHECK_INTERVAL)
+                continue
 
-            # Loga INFRA SOMENTE quando houver novos pedidos
-            if rows:
-                log("infra", "INFO", "scheduler_novos_pedidos", {
-                    "quantidade": len(rows)
-                })
+            # há pendentes: log uma única vez antes do processamento
+            log("infra", "scheduler_verificacao", {"quantidade": len(pendentes)})
+            log("infra", "scheduler_novos_pedidos", {"quantidade": len(pendentes)})
 
-                # RAW completo das linhas também SOMENTE aqui
-                log("raw", "INFO", "novos_pedidos_detectados", {
-                    "quantidade": len(rows),
-                    "linhas": rows
-                })
+            # processa cada item (row_index, row_list)
+            for item in pendentes:
+                # compatibilidade com formatos: tupla (idx,row) ou dict {"index":..., "data":...}
+                if isinstance(item, tuple) and len(item) == 2:
+                    row_index, row = item
+                elif isinstance(item, dict) and "index" in item and "data" in item:
+                    row_index, row = item["index"], item["data"]
+                else:
+                    # formato inesperado — loga e pula
+                    log("system_errors", "scheduler_item_formato_invalido", {"item": str(item)})
+                    continue
 
-                print(f"{len(rows)} novos pedidos encontrados!")
-
-            else:
-                print("Nenhuma nova linha.")  # evita spam no log
-
-            # Enviar pedidos
-            for row_index, row in rows:
-                print(f"Enviando notificação da linha {row_index}...")
-
-                log("infra", "INFO", "scheduler_envio_iniciado", {
-                    "linha": row_index,
-                    "conteudo": row
-                })
-
-                notify_group(GROUP_ID, row)
-                mark_row_notified(row_index)
-
-                log("infra", "INFO", "scheduler_envio_finalizado", {
-                    "linha": row_index
-                })
-
-                print("Notificado e marcado como ENVIADO.\n")
+                _process_one(row_index, row)
 
         except Exception as e:
-            print("⚠️ Erro no scheduler:", e)
-            log("infra", "CRITICAL", "scheduler_erro", {"erro": str(e)})
+            log("system_errors", "scheduler_loop_exception", {"erro": str(e)})
 
-        time.sleep(10)  # verifica a cada 10 segundos
+        # espera antes da próxima iteração
+        time.sleep(CHECK_INTERVAL)
+
+
+def run_scheduler():
+    """
+    Inicia a thread do scheduler (API pública).
+    """
+    log("infra", "run_scheduler_started", {"interval": CHECK_INTERVAL})
+
+    t = threading.Thread(target=_loop, daemon=True)
+    t.start()
+
+    return t

@@ -11,11 +11,22 @@ SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
 
 
 def _get_service():
-    creds = Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=SCOPES
-    )
-    return build("sheets", "v4", credentials=creds).spreadsheets()
+    try:
+        creds = Credentials.from_service_account_file(
+            settings.GOOGLE_SERVICE_ACCOUNT_FILE,
+            scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        )
+        service = build("sheets", "v4", credentials=creds).spreadsheets()
+
+        # Loga somente se debug mode (mas sempre retorna service)
+        if settings.DEBUG_MODE:
+            log("infra", "google_autenticado", {"service_account": settings.GOOGLE_SERVICE_ACCOUNT_FILE})
+
+        return service  # <- SEMPRE retornamos o service
+
+    except Exception as e:
+        log("google_errors", "google_auth_failed", {"erro": str(e)})
+        raise
 
 
 # Convert number to column letter
